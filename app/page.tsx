@@ -919,7 +919,7 @@ export default function Home() {
   return (
     <div className={`min-h-screen pb-20`}>
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 no-print">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-ultra mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-600 p-2 rounded-xl text-white">
               <FileText size={24} />
@@ -978,7 +978,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-ultra mx-auto px-4 py-8">
         <AnimatePresence mode="wait">
           {view === 'edit' ? (
             <motion.div
@@ -1037,7 +1037,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                     {header.fields?.map((f) => (
                       <div key={f.id} className="relative group bg-slate-50 p-3 rounded-xl border border-slate-100">
                         <div className="flex items-center justify-between mb-1">
@@ -1232,7 +1232,7 @@ export default function Home() {
                 </div>
 
                 <div className="border-b-2 border-slate-900 pb-4 mb-8">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 gap-x-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-y-2 gap-x-4">
                     {header.fields?.map(f => (
                       <div key={f.id} className="flex gap-2 text-sm">
                         <span
@@ -1327,7 +1327,7 @@ export default function Home() {
       </main>
 
       {/* Floating Sidebar */}
-      <div className="fixed right-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 no-print z-50">
+      <div className="fixed right-4 xl:right-8 2xl:right-12 top-1/2 -translate-y-1/2 flex flex-col gap-4 no-print z-50">
         <div className="bg-white p-3 rounded-2xl shadow-2xl border border-slate-100 flex flex-col gap-4">
           <button
             onClick={toggleRecording}

@@ -86,9 +86,29 @@ body {
   background: white;
   min-height: 297mm;
   width: 210mm;
+  max-width: 100%;
   padding: 15mm;
   margin: 0 auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+@media (max-width: 210mm) {
+  .paper-preview {
+    width: 100%;
+    padding: 10mm;
+  }
+}
+
+/* Ultra-wide support */
+.max-w-ultra {
+  max-width: 90rem; /* 1440px */
+}
+
+@media (min-width: 2000px) {
+  .max-w-ultra {
+    max-width: 110rem; /* 1760px */
+  }
 }
 
 @layer components {
