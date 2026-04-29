@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+@theme {
+  --font-inter: var(--font-inter);
+  --font-serif-bn: var(--font-serif-bn);
+  --font-naskh-ar: var(--font-naskh-ar);
+  --font-nastaliq-ur: var(--font-nastaliq-ur);
+  --font-crimson: var(--font-crimson);
+  --color-primary: #059669;
+  --color-secondary: #0f172a;
+}
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+body {
+  font-family: var(--font-serif-bn);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.rtl {
+  direction: rtl;
+}
+
+.font-bengali {
+  font-family: var(--font-serif-bn);
+}
+
+.font-arabic {
+  font-family: var(--font-naskh-ar);
+}
+
+.font-urdu {
+  font-family: var(--font-nastaliq-ur);
+}
+
+.font-english {
+  font-family: var(--font-crimson);
+}
+
+.font-serif-bn {
+  font-family: var(--font-serif-bn);
+}
+
+.font-naskh-ar {
+  font-family: var(--font-naskh-ar);
+}
+
+.font-nastaliq-ur {
+  font-family: var(--font-nastaliq-ur);
+}
+
+.font-crimson {
+  font-family: var(--font-crimson);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .print-area {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    box-shadow: none !important;
+  }
+
+  textarea {
+    border: none !important;
+    resize: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+}
+
+.paper-preview {
+  background: white;
+  min-height: 297mm;
+  width: 210mm;
+  padding: 15mm;
+  margin: 0 auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all active:scale-95 flex items-center gap-2;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-4 rounded-lg transition-all active:scale-95 flex items-center gap-2;
+  }
+
+  .input-field {
+    @apply w-full p-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all;
+  }
+}
+
+.microphone-button {
+  @apply p-2 rounded-full transition-all duration-300;
+}
+
+.microphone-button.active {
+  @apply bg-red-100 text-red-600 animate-pulse;
+}
+
+.microphone-button.inactive {
+  @apply bg-slate-100 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600;
+}
+
+/* Placeholder for contenteditable */
+[contenteditable]:empty:before {
+  content: attr(data-placeholder);
+  color: #94a3b8; /* text-slate-400 */
+  pointer-events: none;
+}
+
+[contenteditable]:empty:focus:before {
+  content: "";
+}
+
+.font-rtl-mixed {
+  font-family: var(--font-naskh-ar), var(--font-nastaliq-ur), serif;
+}
+
+.font-naskh {
+  font-family: var(--font-naskh-ar), serif !important;
+}
+
+.font-nastaliq {
+  font-family: var(--font-nastaliq-ur), serif !important;
+}
