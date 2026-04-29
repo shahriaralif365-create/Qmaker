@@ -100,14 +100,30 @@ body {
   }
 }
 
-/* Ultra-wide support */
+/* Ultra-wide support with guaranteed sidebar clearance */
 .max-w-ultra {
-  max-width: 90rem; /* 1440px */
+  width: 100%;
+  max-width: 1280px; /* Base desktop width */
+  margin-left: auto;
+  margin-right: auto;
 }
 
-@media (min-width: 2000px) {
+/* Ensure content never touches the sidebar on desktop screens */
+@media (min-width: 1024px) and (max-width: 1799px) {
   .max-w-ultra {
-    max-width: 110rem; /* 1760px */
+    max-width: calc(100vw - 400px); /* Guaranteed 200px gutter on each side */
+  }
+}
+
+@media (min-width: 1800px) {
+  .max-w-ultra {
+    max-width: 1400px;
+  }
+}
+
+@media (min-width: 2500px) {
+  .max-w-ultra {
+    max-width: 1800px;
   }
 }
 

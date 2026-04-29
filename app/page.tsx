@@ -783,8 +783,8 @@ export default function Home() {
     if (!activeField) {
       setModal({
         isOpen: true,
-        title: 'Selection Required',
-        message: "Please click on a text field first to use voice input.",
+        title: 'সিলেকশন প্রয়োজন',
+        message: "ভয়েস ইনপুট ব্যবহার করতে প্রথমে যেকোনো একটি টেক্সট ফিল্ডে ক্লিক করুন।",
         type: 'alert'
       });
       return;
@@ -1327,7 +1327,7 @@ export default function Home() {
       </main>
 
       {/* Floating Sidebar */}
-      <div className="fixed right-4 xl:right-8 2xl:right-12 top-1/2 -translate-y-1/2 flex flex-col gap-4 no-print z-50">
+      <div className="fixed right-2 xl:right-4 2xl:right-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 no-print z-50">
         <div className="bg-white p-3 rounded-2xl shadow-2xl border border-slate-100 flex flex-col gap-4">
           <button
             onClick={toggleRecording}
