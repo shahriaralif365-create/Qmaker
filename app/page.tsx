@@ -1063,7 +1063,7 @@ export default function Home() {
 
   // --- Voice Recognition ---
   const startRecognition = useCallback(() => {
-    if (!('webkitSpeechRecognition' in window) && !('speechRecognition' in window)) {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setModal({
         isOpen: true,
         title: 'Error',
@@ -1073,7 +1073,7 @@ export default function Home() {
       return;
     }
 
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).speechRecognition;
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = voiceLangRef.current;
     recognition.continuous = true;
@@ -1101,10 +1101,12 @@ export default function Home() {
         if (!targetEl || targetEl.contentEditable !== 'true') {
           // Attempt to find element by ID from activeFieldRef
           if (activeFieldRef.current) {
-            const { id, type, fieldName } = activeFieldRef.current;
-            // Since we don't have IDs on all elements, we rely on focus management
-            // In a real app, we'd use refs for each field.
-            // For now, we'll try to focus back if we have a record of it.
+            const { id } = activeFieldRef.current;
+            if (id === 'headerEditor') {
+              targetEl = headerEditorRef.current as HTMLElement;
+            } else {
+              targetEl = document.getElementById(`editable-${id}`) as HTMLElement;
+            }
           }
         }
 
@@ -1188,11 +1190,6 @@ export default function Home() {
       });
       return;
     }
-
-    const startRecognition = () => {
-      if (!recognitionRef.current) return;
-      recognitionRef.current.start();
-    };
 
     startRecognition();
   };
@@ -1528,6 +1525,7 @@ export default function Home() {
                             <div className="bg-emerald-100 text-emerald-700 w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0">{getNativeNumber(index + 1, paperLang)}</div>
                             <div className="flex-1 space-y-4">
                               <EditableText
+                                id={`editable-${q.id}`}
                                 value={q.text}
                                 onChange={(val: string) => updateQuestionText(q.id, val)}
                                 onFocus={() => setActiveField({ id: q.id, type: 'question' })}
@@ -1550,6 +1548,7 @@ export default function Home() {
                                       className="w-12 text-slate-400 mt-1 font-medium bg-transparent outline-none text-center"
                                     />
                                     <EditableText
+                                      id={`editable-${sq.id}`}
                                       value={sq.text}
                                       onChange={(val: string) => updateSubQuestionText(q.id, sq.id, val)}
                                       onFocus={() => setActiveField({ id: sq.id, type: 'subquestion', qId: q.id })}
