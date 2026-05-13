@@ -1251,23 +1251,6 @@ export default function Home() {
           spacing: { after: 120 }
         }));
       });
-    } else {
-      // Fallback to legacy fields if rich editor is empty
-      headerParagraphs.push(new Paragraph({
-        text: header.madrasaName,
-        heading: HeadingLevel.HEADING_1,
-        alignment: AlignmentType.CENTER,
-      }));
-      headerParagraphs.push(new Paragraph({
-        text: header.examTitle,
-        alignment: AlignmentType.CENTER,
-      }));
-      header.fields.forEach(f => {
-        headerParagraphs.push(new Paragraph({
-          text: `${f.label}: ${f.value}`,
-          alignment: AlignmentType.CENTER,
-        }));
-      });
     }
 
     const doc = new Document({
