@@ -641,7 +641,7 @@ export default function Home() {
     }));
   }, [header, questions, lang, paperLang, headerSizes, headerWeights, headerUnderlines, headerOverlines, headerAlignments, headerHtml, headerBaseFontSize]);
 
-  // Sync voiceLangRef with state
+  // Keep voiceLangRef in sync with voiceLang state
   useEffect(() => {
     voiceLangRef.current = voiceLang;
   }, [voiceLang]);
@@ -1063,119 +1063,152 @@ export default function Home() {
 
   // --- Voice Recognition ---
   const startRecognition = useCallback(() => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    const SpeechConstructor = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    
+    if (!SpeechConstructor) {
       setModal({
         isOpen: true,
-        title: 'Error',
-        message: "Voice recognition is not supported in this browser.",
+        title: uiT.title,
+        message: isClient && !window.isSecureContext 
+          ? "ভয়েস রিকগনিশন ব্যবহারের জন্য HTTPS সংযোগ প্রয়োজন। অনুগ্রহ করে নিরাপদ সংযোগ ব্যবহার করুন।"
+          : "আপনার ব্রাউজারে ভয়েস রিকগনিশন সাপোর্ট করে না। অনুগ্রহ করে ক্রোম বা সাফারি ব্যবহার করুন।",
         type: 'alert'
       });
+      setIsRecording(false);
+      isRecordingRef.current = false;
       return;
     }
 
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.lang = voiceLangRef.current;
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    recognition.onstart = () => {
-      setIsRecording(true);
-    };
-
-    recognition.onresult = (event: any) => {
-      let currentTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          const transcript = event.results[i][0].transcript;
-          if (!transcript && transcript !== "") return;
-          
-          const fontClass = voiceLangRef.current === 'ar-SA' ? 'font-naskh' : voiceLangRef.current === 'ur-PK' ? 'font-nastaliq' : '';
-          currentTranscript += fontClass ? `<span class="${fontClass}">${transcript}</span>` : transcript;
-        }
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch(e) {}
       }
 
-      if (currentTranscript) {
-        // Use activeFieldRef to find the last active element if document.activeElement is not valid
-        let targetEl = document.activeElement as HTMLElement;
-        if (!targetEl || targetEl.contentEditable !== 'true') {
-          // Attempt to find element by ID from activeFieldRef
-          if (activeFieldRef.current) {
-            const { id } = activeFieldRef.current;
-            if (id === 'headerEditor') {
-              targetEl = headerEditorRef.current as HTMLElement;
-            } else {
-              targetEl = document.getElementById(`editable-${id}`) as HTMLElement;
-            }
+      const recognition = new SpeechConstructor();
+      recognition.lang = voiceLangRef.current;
+      
+      // Mobile browsers often have issues with continuous: true
+      // We rely on our manual restart logic in onend for better stability
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        isRecordingRef.current = true;
+      };
+
+      recognition.onresult = (event: any) => {
+        let currentTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            const transcript = event.results[i][0].transcript;
+            if (!transcript && transcript !== "") continue;
+            
+            const fontClass = voiceLangRef.current === 'ar-SA' ? 'font-naskh' : voiceLangRef.current === 'ur-PK' ? 'font-nastaliq' : '';
+            currentTranscript += fontClass ? `<span class="${fontClass}">${transcript}</span>` : transcript;
           }
         }
 
-        if (targetEl && targetEl.contentEditable === 'true') {
-          const selection = window.getSelection();
-          if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            
-            // Smart Selection Replacement: If text is selected, delete it first
-            if (!range.collapsed) {
-              range.deleteContents();
+        if (currentTranscript) {
+          let targetEl = document.activeElement as HTMLElement;
+          if (!targetEl || targetEl.contentEditable !== 'true') {
+            if (activeFieldRef.current) {
+              const { id } = activeFieldRef.current;
+              if (id === 'headerEditor') {
+                targetEl = headerEditorRef.current as HTMLElement;
+              } else {
+                targetEl = document.getElementById(`editable-${id}`) as HTMLElement;
+              }
             }
-            
-            const preRange = range.cloneRange();
-            preRange.selectNodeContents(targetEl);
-            preRange.setEnd(range.startContainer, range.startOffset);
-            const textBefore = preRange.toString();
-            const needsLeadingSpace = textBefore.length > 0 && !textBefore.endsWith(' ') && !textBefore.endsWith('\n');
+          }
 
-            const postRange = range.cloneRange();
-            postRange.selectNodeContents(targetEl);
-            postRange.setStart(range.endContainer, range.endOffset);
-            const textAfter = postRange.toString();
-            const needsTrailingSpace = textAfter.length > 0 && !textAfter.startsWith(' ') && !textAfter.startsWith('\n');
-            
-            const htmlToInsert = (needsLeadingSpace ? '&nbsp;' : '') + currentTranscript + (needsTrailingSpace ? '&nbsp;' : '');
-            
-            // Safer way to insert HTML
-            const fragment = range.createContextualFragment(htmlToInsert);
-            range.insertNode(fragment);
-            
-            // Move cursor to end of inserted content
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
+          if (targetEl && targetEl.contentEditable === 'true') {
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              if (!range.collapsed) range.deleteContents();
+              
+              const preRange = range.cloneRange();
+              preRange.selectNodeContents(targetEl);
+              preRange.setEnd(range.startContainer, range.startOffset);
+              const textBefore = preRange.toString();
+              const needsLeadingSpace = textBefore.length > 0 && !textBefore.endsWith(' ') && !textBefore.endsWith('\n');
 
-            // Trigger change detection for React
-            targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+              const postRange = range.cloneRange();
+              postRange.selectNodeContents(targetEl);
+              postRange.setStart(range.endContainer, range.endOffset);
+              const textAfter = postRange.toString();
+              const needsTrailingSpace = textAfter.length > 0 && !textAfter.startsWith(' ') && !textAfter.startsWith('\n');
+              
+              const htmlToInsert = (needsLeadingSpace ? '&nbsp;' : '') + currentTranscript + (needsTrailingSpace ? '&nbsp;' : '');
+              const fragment = range.createContextualFragment(htmlToInsert);
+              range.insertNode(fragment);
+              range.collapse(false);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              targetEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
           }
         }
-      }
-    };
+      };
 
-    recognition.onend = () => {
-      setTimeout(() => {
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+          setModal({
+            isOpen: true,
+            title: 'অনুমতি প্রয়োজন',
+            message: "মাইক্রোফোন ব্যবহারের অনুমতি দেওয়া হয়নি। ব্রাউজার সেটিংস থেকে মাইক্রোফোন পারমিশন এনাবল করুন।",
+            type: 'alert'
+          });
+        }
+        if (event.error === 'network') {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+          setModal({
+            isOpen: true,
+            title: 'নেটওয়ার্ক এরর',
+            message: "ভয়েস ইনপুট ব্যবহারের জন্য ইন্টারনেট সংযোগ প্রয়োজন।",
+            type: 'alert'
+          });
+        }
+      };
+
+      recognition.onend = () => {
         if (isRecordingRef.current && recognitionRef.current === recognition) {
-          startRecognition();
+          // Always create a fresh instance on restart to ensure 
+          // all settings (like language) are perfectly updated
+          setTimeout(() => {
+            if (isRecordingRef.current) {
+              startRecognition();
+            }
+          }, 300);
+        } else {
+          setIsRecording(false);
         }
-      }, 100);
-    };
+      };
 
-    recognition.onerror = (event: any) => {
-      if (event.error === 'not-allowed' || event.error === 'no-speech') {
-        setIsRecording(false);
-        recognitionRef.current = null;
-      }
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  }, [questions]);
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.error('Failed to initialize speech recognition:', e);
+      setIsRecording(false);
+      isRecordingRef.current = false;
+    }
+  }, [uiT.title]);
 
   const toggleRecording = () => {
     if (isRecording) {
       setIsRecording(false);
       isRecordingRef.current = false;
       if (recognitionRef.current) {
-        recognitionRef.current.onend = null;
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.onend = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.stop();
+        } catch(e) {}
         recognitionRef.current = null;
       }
       return;
@@ -1191,6 +1224,10 @@ export default function Home() {
       return;
     }
 
+    // Give immediate feedback by setting recording to true
+    // This will turn the button green immediately on click
+    setIsRecording(true);
+    isRecordingRef.current = true;
     startRecognition();
   };
 

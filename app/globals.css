@@ -19,6 +19,11 @@ body {
   font-family: var(--font-serif-bn);
   background: var(--background);
   color: var(--foreground);
+  scrollbar-gutter: stable;
+}
+
+html {
+  scrollbar-gutter: stable;
 }
 
 .rtl {
@@ -189,17 +194,18 @@ body {
   padding-right: var(--page-padding);
 }
 
-/* Ensure content never touches the sidebar on medium to large screens */
+/* Ensure content is perfectly centered on all screens */
 @media (min-width: 1200px) {
   .max-w-ultra {
-    padding-right: calc(var(--page-padding) + 110px); /* Reserved for floating sidebar */
+    /* Removed extra padding-right to ensure perfect centering */
+    padding-right: var(--page-padding); 
   }
 }
 
 @media (min-width: 2000px) {
   .max-w-ultra {
     max-width: 1800px;
-    padding-right: 150px;
+    padding-right: var(--page-padding);
   }
 }
 
