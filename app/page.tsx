@@ -1341,7 +1341,7 @@ export default function Home() {
   if (!isClient) return null;
 
   return (
-    <div className={`min-h-screen pb-20`}>
+    <div className={`min-h-screen pb-20 print:pb-0 print:min-h-0`}>
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 no-print shadow-sm">
         <div className="max-w-ultra mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3 py-3 md:h-16 md:py-0 px-4">
           <div className="flex items-center gap-3">
