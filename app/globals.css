@@ -438,3 +438,16 @@ body {
   max-width: 100%;
   height: auto;
 }
+
+/* Fix for html2canvas unsupported lab() / oklch() color function with Tailwind v4 */
+.html2canvas-safe-colors, 
+.html2canvas-safe-colors * {
+  color: rgb(0, 0, 0) !important;
+  border-color: rgb(0, 0, 0) !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+.html2canvas-safe-colors,
+.html2canvas-safe-colors .paper-preview {
+  background-color: rgb(255, 255, 255) !important;
+}

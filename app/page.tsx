@@ -7,8 +7,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
 
@@ -1210,43 +1209,6 @@ export default function Home() {
   };
 
   // --- Exports ---
-  const exportPDF = async () => {
-    if (!previewRef.current) return;
-    const canvas = await html2canvas(previewRef.current, { 
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false
-    });
-    
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    
-    const imgProps = pdf.getImageProperties(imgData);
-    const canvasHeightInPdf = (imgProps.height * pdfWidth) / imgProps.width;
-    
-    let heightLeft = canvasHeightInPdf;
-    let position = 0;
-    
-    // Add first page
-    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, canvasHeightInPdf);
-    heightLeft -= pdfHeight;
-    
-    // Add subsequent pages if needed
-    while (heightLeft > 0) {
-      position = heightLeft - canvasHeightInPdf;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, canvasHeightInPdf);
-      heightLeft -= pdfHeight;
-    }
-    
-    pdf.save(getDownloadFileName('pdf'));
-  };
-
-
 
   const exportWord = async () => {
     const headerParagraphs: Paragraph[] = [];
@@ -1621,8 +1583,7 @@ export default function Home() {
             </motion.div>
           ) : (
             <motion.div key="preview" className="space-y-8">
-              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-center gap-3 md:gap-4 no-print">
-                <button onClick={exportPDF} className="btn-primary text-xs sm:text-sm"><Download size={16} /> {uiT.downloadPDF}</button>
+              <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center justify-center gap-3 md:gap-4 no-print">
                 <button onClick={exportWord} className="btn-primary bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm"><FileText size={16} /> {uiT.downloadWord}</button>
                 <button onClick={handlePrint} className="btn-secondary text-xs sm:text-sm col-span-2 sm:col-span-1"><Printer size={16} /> {uiT.print}</button>
               </div>
