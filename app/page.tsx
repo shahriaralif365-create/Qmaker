@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Mic, MicOff, Plus, Trash2, Download, Printer,
+  Mic, MicOff, Plus, Trash2, Download, Printer, Upload,
   ChevronRight, Eye, Edit3, Globe, Save, FileText, RotateCcw, AlertTriangle, X,
   AlignLeft, AlignCenter, AlignRight, AlignJustify
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
+
 
 // --- Types ---
 interface SubQuestion {
@@ -53,11 +54,11 @@ type Language = 'bn-BD' | 'ar-SA' | 'en-US' | 'ur-PK' | 'fa-IR';
 // --- Translations ---
 const translations = {
   'bn-BD': {
-    title: 'মাদ্রাসা প্রশ্ন নির্মাতা',
+    title: 'সহজ প্রশ্ন',
     madrasaName: 'মাদ্রাসার নাম',
     examTitle: 'পরীক্ষার নাম',
     subject: 'বিষয়',
-    class: 'জামাত/শ্রেণি',
+    class: 'জামাত',
     date: 'তারিখ',
     time: 'সময়',
     fullMarks: 'পূর্ণমান',
@@ -80,7 +81,7 @@ const translations = {
     addPageBreak: 'নতুন পেজ যোগ করুন',
   },
   'ar-SA': {
-    title: 'مولد أسئلة المدرسة',
+    title: 'سؤال سهل',
     madrasaName: 'اسم المدرسة',
     examTitle: 'عنوان الامتحان',
     subject: 'المادة',
@@ -104,7 +105,7 @@ const translations = {
     voiceStop: 'إيقاف التسجيل',
   },
   'en-US': {
-    title: 'Madrasa Question Maker',
+    title: 'Easy Question',
     madrasaName: 'Madrasa Name',
     examTitle: 'Exam Title',
     subject: 'Subject',
@@ -128,7 +129,7 @@ const translations = {
     voiceStop: 'Stop recording',
   },
   'ur-PK': {
-    title: 'مدرسہ سوالیہ پرچہ بنانے والا',
+    title: 'آسان سوال',
     madrasaName: 'مدرسہ کا نام',
     examTitle: 'امتحان کا عنوان',
     subject: 'مضمون',
@@ -177,12 +178,25 @@ const translations = {
   }
 };
 
+const JAMAAT_LIST = [
+  'মক্তব', 'নুরানী', 'নাজেরা', 'হিফজ', 'ইবতেদায়ী', 'মিজান', 'নাহবেমীর', 
+  'হেদায়াতুন্নাহু', 'কাফিয়া', 'শরহে জামী', 'শরহে বেকায়া', 'জালালাইন', 
+  'মিশকাত', 'দাওরায়ে হাদীস', 'তাকমীল', 'ফযীলত', 'সানাবিয়্যাহ খাসসাহ', 
+  'সানাবিয়্যাহ আম্মাহ', 'মুতাওয়াসসিতাহ'
+];
+
+const EXAM_LIST = [
+  '১ম সাময়িক পরীক্ষা', '২য় সাময়িক পরীক্ষা', 'বার্ষিক পরীক্ষা', 
+  'সাপ্তাহিক পরীক্ষা', 'মাসিক পরীক্ষা', 'নির্বাচনী পরীক্ষা', 
+  'কেন্দ্রীয় পরীক্ষা', 'অর্ধ-বার্ষিক পরীক্ষা'
+];
+
 const DEFAULT_HEADER: HeaderData = {
-  madrasaName: '',
+  madrasaName: 'জামিয়া ইবনে আব্বাস (রা.) সামান্তপুর',
   examTitle: '',
   fields: [
     { id: 'subject', label: 'বিষয়', value: '' },
-    { id: 'class', label: 'জামাত/শ্রেণি', value: '' },
+    { id: 'class', label: 'জামাত', value: '' },
     { id: 'date', label: 'তারিখ', value: '' },
     { id: 'time', label: 'সময়', value: '' },
     { id: 'fullMarks', label: 'পূর্ণমান', value: '' },
@@ -203,7 +217,7 @@ const EditableText = ({
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) {
+    if (ref.current && document.activeElement !== ref.current && ref.current.innerHTML !== value) {
       ref.current.innerHTML = value || '';
     }
   }, [value]);
@@ -228,11 +242,17 @@ const EditableText = ({
 };
 
 export default function Home() {
+  // --- Translations & Helpers ---
+  const [paperLang, setPaperLang] = useState<Language>('bn-BD');
+  const t = translations[paperLang];
+  const uiT = translations['bn-BD'];
+  const isRTL = paperLang === 'ar-SA' || paperLang === 'ur-PK' || paperLang === 'fa-IR';
+
   // --- State ---
   const [lang, setLang] = useState<Language>('bn-BD');
-  const [paperLang, setPaperLang] = useState<Language>('bn-BD');
   const [voiceLang, setVoiceLang] = useState<Language>('bn-BD');
   const [header, setHeader] = useState<HeaderData>(DEFAULT_HEADER);
+  const [headerHtml, setHeaderHtml] = useState<string>('');
   const [questions, setQuestions] = useState<Question[]>([]);
   const [view, setView] = useState<'edit' | 'preview'>('edit');
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -243,15 +263,90 @@ export default function Home() {
     fieldId?: string;
     qId?: string;
   } | null>(null);
+
+  // --- Helper Functions for Formatting State ---
+  const isFormatActive = (format: 'bold' | 'underline' | 'overline') => {
+    if (typeof document === 'undefined') return false;
+    
+    // For rich editor, use browser command state if focused
+    if (activeField?.id === 'headerEditor') {
+      if (format === 'bold') return document.queryCommandState('bold');
+      if (format === 'underline') return document.queryCommandState('underline');
+      if (format === 'overline') {
+        // queryCommandState doesn't work for overline, check selection
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          let node: Node | null = selection.anchorNode;
+          while (node && node !== headerEditorRef.current) {
+            if (node instanceof HTMLElement && node.style.textDecoration.includes('overline')) return true;
+            node = node.parentNode;
+          }
+        }
+        return false;
+      }
+    }
+
+    if (!activeField) return false;
+    const { id, type, fieldName, fieldId, qId } = activeField;
+    const key = fieldName === 'dynamic' ? (fieldId || '') : (fieldName || '');
+    
+    if (type === 'header') {
+      if (format === 'bold') return !!headerWeights[key];
+      if (format === 'underline') return !!headerUnderlines[key];
+      if (format === 'overline') return !!headerOverlines[key];
+    }
+    
+    if (type === 'question') {
+      const q = questions.find(q => q.id === id);
+      if (format === 'bold') return !!q?.isBold;
+      if (format === 'underline') return !!q?.isUnderline;
+      if (format === 'overline') return !!q?.isOverline;
+    }
+    
+    if (type === 'subquestion' && qId) {
+      const q = questions.find(q => q.id === qId);
+      const sq = q?.subQuestions.find(sq => sq.id === id);
+      if (format === 'bold') return !!sq?.isBold;
+      if (format === 'underline') return !!sq?.isUnderline;
+      if (format === 'overline') return !!sq?.isOverline;
+    }
+    return false;
+  };
+
+  const getAlignmentActive = () => {
+    if (typeof document === 'undefined') return isRTL ? 'right' : 'left';
+
+    // For rich editor, use browser command state if focused
+    if (activeField?.id === 'headerEditor') {
+      if (document.queryCommandState('justifyCenter')) return 'center';
+      if (document.queryCommandState('justifyRight')) return 'right';
+      if (document.queryCommandState('justifyFull')) return 'justify';
+      if (document.queryCommandState('justifyLeft')) return 'left';
+      // Default to center for header editor if nothing else set
+      return 'center';
+    }
+
+    if (!activeField) return isRTL ? 'right' : 'left';
+    const { id, type, fieldName, fieldId, qId } = activeField;
+    const key = fieldName === 'dynamic' ? (fieldId || '') : (fieldName || '');
+    
+    if (type === 'header') return headerAlignments[key] || 'center';
+    if (type === 'question') return questions.find(q => q.id === id)?.alignment || (isRTL ? 'right' : 'left');
+    if (type === 'subquestion' && qId) return questions.find(q => q.id === qId)?.subQuestions.find(sq => sq.id === id)?.alignment || (isRTL ? 'right' : 'left');
+    
+    return isRTL ? 'right' : 'left';
+  };
   const activeFieldRef = useRef<any>(null);
   const voiceLangRef = useRef<Language>('bn-BD');
   const isRecordingRef = useRef<boolean>(false);
   const [headerSizes, setHeaderSizes] = useState<Record<string, number>>({});
+  const [headerBaseFontSize, setHeaderBaseFontSize] = useState<number>(24);
   const [headerWeights, setHeaderWeights] = useState<Record<string, boolean>>({});
   const [headerUnderlines, setHeaderUnderlines] = useState<Record<string, boolean>>({});
   const [headerOverlines, setHeaderOverlines] = useState<Record<string, boolean>>({});
   const [headerAlignments, setHeaderAlignments] = useState<Record<string, 'left' | 'center' | 'right' | 'justify'>>({});
   const [isClient, setIsClient] = useState(false);
+  const [isWideScreen, setIsWideScreen] = useState(true);
   const [modal, setModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -260,9 +355,153 @@ export default function Home() {
     type: 'alert' | 'confirm';
   }>({ isOpen: false, title: '', message: '', type: 'alert' });
 
+
   // --- Refs ---
   const previewRef = useRef<HTMLDivElement>(null);
+  const headerEditorRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // --- Word Paste Sanitizer ---
+  const sanitizeWordHtml = (html: string): string => {
+    // Remove XML declarations and processing instructions
+    let clean = html.replace(/<\?xml[^>]*>/gi, '');
+    // Remove MS Office conditional comments
+    clean = clean.replace(/<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi, '');
+    clean = clean.replace(/<!--[\s\S]*?-->/g, '');
+    // Remove Office namespace tags (o:p, w:sdt, etc.)
+    clean = clean.replace(/<\/?o:[^>]*>/gi, '');
+    clean = clean.replace(/<\/?w:[^>]*>/gi, '');
+    clean = clean.replace(/<\/?m:[^>]*>/gi, '');
+    clean = clean.replace(/<\/?v:[^>]*>/gi, '');
+    // Remove class attributes with Mso prefixes but keep other classes
+    clean = clean.replace(/\s*class="[^"]*Mso[^"]*"/gi, '');
+    // Remove lang attributes
+    clean = clean.replace(/\s*lang="[^"]*"/gi, '');
+    // Clean up style attributes - keep useful ones
+    clean = clean.replace(/style="([^"]*)"/gi, (match, styles) => {
+      const allowedProps = [
+        'font-size', 'font-weight', 'font-style', 'font-family',
+        'text-align', 'text-decoration', 'text-indent',
+        'color', 'background-color', 'background',
+        'margin', 'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
+        'padding', 'padding-top', 'padding-bottom', 'padding-left', 'padding-right',
+        'border', 'border-top', 'border-bottom', 'border-left', 'border-right',
+        'border-collapse', 'border-spacing',
+        'width', 'height', 'min-width', 'min-height',
+        'line-height', 'letter-spacing',
+        'vertical-align', 'direction'
+      ];
+      const filtered = styles
+        .split(';')
+        .map((s: string) => s.trim())
+        .filter((s: string) => {
+          if (!s) return false;
+          const prop = s.split(':')[0]?.trim().toLowerCase();
+          return allowedProps.some(a => prop === a);
+        })
+        .join('; ');
+      return filtered ? `style="${filtered}"` : '';
+    });
+    // Remove empty spans
+    clean = clean.replace(/<span\s*>([\s\S]*?)<\/span>/gi, '$1');
+    // Remove xml namespace declarations
+    clean = clean.replace(/\s*xmlns:[a-z]+="[^"]*"/gi, '');
+    clean = clean.replace(/\s*xmlns="[^"]*"/gi, '');
+    // Clean up excessive whitespace in tags
+    clean = clean.replace(/<([a-z]+)\s{2,}/gi, '<$1 ');
+    // Remove empty paragraphs (but keep line breaks)
+    clean = clean.replace(/<p[^>]*>\s*(&nbsp;)?\s*<\/p>/gi, '<br/>');
+    return clean.trim();
+  };
+
+  // --- Header Backup & Restore ---
+  const restoreInputRef = useRef<HTMLInputElement>(null);
+
+
+  const backupHeader = () => {
+
+    if (!headerHtml) {
+      setModal({
+        isOpen: true,
+        title: 'ব্যাকআপ ব্যর্থ',
+        message: 'হেডার সেকশনে কোনো কন্টেন্ট নেই। ব্যাকআপ করতে আগে কিছু লিখুন বা পেস্ট করুন।',
+        type: 'alert'
+      });
+      return;
+    }
+
+    const backupData = {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      headerHtml: headerHtml
+    };
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toLocaleDateString('bn-BD').replace(/\//g, '-');
+    a.download = `header-backup-${dateStr}.qheader`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    setModal({
+      isOpen: true,
+      title: 'ব্যাকআপ সফল ✅',
+      message: 'হেডার সেকশনের ব্যাকআপ ফাইল সফলভাবে ডাউনলোড হয়েছে।',
+      type: 'alert'
+    });
+  };
+
+  const restoreHeader = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const backupData = JSON.parse(content);
+
+        if (!backupData.headerHtml && backupData.headerHtml !== '') {
+          setModal({
+            isOpen: true,
+            title: 'রিস্টোর ব্যর্থ',
+            message: 'এটি একটি বৈধ ব্যাকআপ ফাইল নয়। অনুগ্রহ করে সঠিক .qheader ফাইল নির্বাচন করুন।',
+            type: 'alert'
+          });
+          return;
+        }
+
+        setHeaderHtml(backupData.headerHtml);
+        if (headerEditorRef.current) {
+          headerEditorRef.current.innerHTML = backupData.headerHtml;
+        }
+
+        setModal({
+          isOpen: true,
+          title: 'রিস্টোর সফল ✅',
+          message: `হেডার সফলভাবে রিস্টোর হয়েছে! (ব্যাকআপ তারিখ: ${backupData.timestamp ? new Date(backupData.timestamp).toLocaleString('bn-BD') : 'অজানা'})`,
+          type: 'alert'
+        });
+      } catch (err) {
+        setModal({
+          isOpen: true,
+          title: 'রিস্টোর ব্যর্থ',
+          message: 'ফাইলটি পড়তে সমস্যা হয়েছে। অনুগ্রহ করে একটি বৈধ .qheader ফাইল ব্যবহার করুন।',
+          type: 'alert'
+        });
+      }
+    };
+    reader.readAsText(file);
+
+    // Reset file input so the same file can be selected again
+    if (restoreInputRef.current) {
+      restoreInputRef.current.value = '';
+    }
+  };
 
   // Sync state to ref for onresult access
   useEffect(() => {
@@ -285,25 +524,14 @@ export default function Home() {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
-  // Global KeyDown for Smart Space Management (Prevent Double Spaces)
+  // Sync headerHtml to editor ref
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.contentEditable === 'true' && e.key === ' ') {
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          const textBefore = range.startContainer.textContent?.slice(0, range.startOffset) || '';
-          if (textBefore.endsWith(' ') || textBefore.endsWith('\u00A0')) {
-            e.preventDefault();
-          }
-        }
-      }
-    };
+    if (headerEditorRef.current && headerHtml !== headerEditorRef.current.innerHTML) {
+      headerEditorRef.current.innerHTML = headerHtml;
+    }
+  }, [headerHtml]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+
 
   // Hydration fix
   useEffect(() => {
@@ -320,8 +548,18 @@ export default function Home() {
           headerWeights: sHeaderWeights,
           headerUnderlines: sHeaderUnderlines,
           headerOverlines: sHeaderOverlines,
-          headerAlignments: sHeaderAlignments
+          headerAlignments: sHeaderAlignments,
+          headerHtml: sHeaderHtml,
+          headerBaseFontSize: sHeaderBaseFontSize
         } = JSON.parse(saved);
+
+        if (sHeaderHtml) {
+          setHeaderHtml(sHeaderHtml);
+        }
+        
+        if (sHeaderBaseFontSize) {
+          setHeaderBaseFontSize(sHeaderBaseFontSize);
+        }
 
         // Migration logic for older versions
         let migHeader = sHeader;
@@ -331,21 +569,42 @@ export default function Home() {
             examTitle: sHeader.examTitle || '',
             fields: [
               { id: 'subject', label: 'বিষয়', value: sHeader.subjectName || '' },
-              { id: 'class', label: 'জামাত/শ্রেণি', value: sHeader.className || '' },
+              { id: 'class', label: 'জামাত', value: sHeader.className || '' },
               { id: 'date', label: 'তারিখ', value: sHeader.date || '' },
               { id: 'time', label: 'সময়', value: sHeader.time || '' },
               { id: 'fullMarks', label: 'পূর্ণমান', value: sHeader.fullMarks || '' },
             ]
           };
         }
+        
+        // Force fixed madrasa name and styles
+        if (migHeader) {
+          migHeader.madrasaName = 'জামিয়া ইবনে আব্বাস (রা.) সামান্তপুর';
+        }
 
         setHeader(migHeader);
         setQuestions(sQuestions);
-        if (sHeaderSizes) setHeaderSizes(sHeaderSizes);
-        if (sHeaderWeights) setHeaderWeights(sHeaderWeights);
-        if (sHeaderUnderlines) setHeaderUnderlines(sHeaderUnderlines);
-        if (sHeaderOverlines) setHeaderOverlines(sHeaderOverlines);
-        if (sHeaderAlignments) setHeaderAlignments(sHeaderAlignments);
+        
+        const newSizes = sHeaderSizes || {};
+        if (!newSizes.madrasaName) newSizes.madrasaName = 36;
+        setHeaderSizes(newSizes);
+
+        const newWeights = sHeaderWeights || {};
+        setHeaderWeights(newWeights);
+
+        const newUnderlines = sHeaderUnderlines || {};
+        setHeaderUnderlines(newUnderlines);
+
+        const newOverlines = sHeaderOverlines || {};
+        setHeaderOverlines(newOverlines);
+
+        const newAlignments = sHeaderAlignments || {};
+        if (!newAlignments.madrasaName) newAlignments.madrasaName = 'center';
+        if (!newAlignments.examTitle) newAlignments.examTitle = 'center';
+        migHeader.fields.forEach((f: any) => {
+          if (!newAlignments[f.id]) newAlignments[f.id] = 'center';
+        });
+        setHeaderAlignments(newAlignments);
         setLang(sLang || 'bn-BD');
         setPaperLang(sPaperLang || sLang || 'bn-BD');
         setVoiceLang(sPaperLang || sLang || 'bn-BD');
@@ -379,9 +638,24 @@ export default function Home() {
   // Save to localStorage
   const saveDraft = useCallback(() => {
     localStorage.setItem('q-maker-draft', JSON.stringify({
-      header, questions, lang, paperLang, headerSizes, headerWeights, headerUnderlines, headerOverlines, headerAlignments
+      header, questions, lang, paperLang, headerSizes, headerWeights, headerUnderlines, headerOverlines, headerAlignments, headerHtml, headerBaseFontSize
     }));
-  }, [header, questions, lang, paperLang, headerSizes, headerWeights, headerUnderlines, headerOverlines, headerAlignments]);
+  }, [header, questions, lang, paperLang, headerSizes, headerWeights, headerUnderlines, headerOverlines, headerAlignments, headerHtml, headerBaseFontSize]);
+
+  // Sync voiceLangRef with state
+  useEffect(() => {
+    voiceLangRef.current = voiceLang;
+  }, [voiceLang]);
+
+  // Track screen width for responsive control bar
+  useEffect(() => {
+    const handleResize = () => {
+      setIsWideScreen(window.innerWidth > 965);
+    };
+    handleResize(); // Set initial value
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const resetPaper = () => {
     setModal({
@@ -494,6 +768,50 @@ export default function Home() {
 
     const { id, type, fieldName, fieldId, qId } = activeField;
 
+    // Header editor: use execCommand for font size on selection
+    if (type === 'header' && id === 'headerEditor') {
+      const selection = window.getSelection();
+      if (selection && headerEditorRef.current) {
+        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        
+        if (range && selection.toString().length > 0) {
+          // Apply font size change to selected text
+          const fragment = range.extractContents();
+          const wrapper = document.createElement('span');
+          
+          // Try to get current font size from selection
+          const tempDiv = document.createElement('div');
+          tempDiv.appendChild(fragment.cloneNode(true));
+          const computedStyle = window.getComputedStyle(
+            range.startContainer.parentElement || headerEditorRef.current
+          );
+          const currentSize = parseFloat(computedStyle.fontSize) || 16;
+          const newSize = Math.max(8, Math.min(72, currentSize + delta));
+          
+          wrapper.style.fontSize = `${newSize}px`;
+          wrapper.appendChild(fragment);
+          range.insertNode(wrapper);
+          
+          // Restore selection
+          selection.removeAllRanges();
+          const newRange = document.createRange();
+          newRange.selectNodeContents(wrapper);
+          selection.addRange(newRange);
+        } else {
+          // No selection - apply to ALL content by updating state
+          const newSize = Math.max(8, Math.min(72, headerBaseFontSize + delta));
+          setHeaderBaseFontSize(newSize);
+          
+          // Also wrap existing content if it's the first time to ensure it's in the HTML
+          if (!headerHtml.includes('font-size')) {
+            headerEditorRef.current.innerHTML = `<div style="font-size: ${newSize}px">${headerEditorRef.current.innerHTML}</div>`;
+          }
+        }
+        setHeaderHtml(headerEditorRef.current.innerHTML);
+      }
+      return;
+    }
+
     if (type === 'header' && fieldName) {
       if (fieldName === 'madrasaName' || fieldName === 'examTitle') {
         setHeaderSizes(prev => ({
@@ -527,6 +845,15 @@ export default function Home() {
 
   const toggleBold = () => {
     const selection = window.getSelection();
+
+    // Header editor: always use execCommand
+    if (activeField?.id === 'headerEditor' && headerEditorRef.current) {
+      headerEditorRef.current.focus();
+      document.execCommand('bold', false);
+      setHeaderHtml(headerEditorRef.current.innerHTML);
+      return;
+    }
+
     if (selection && selection.toString().length > 0) {
       document.execCommand('bold', false);
       return;
@@ -559,6 +886,15 @@ export default function Home() {
 
   const toggleUnderline = () => {
     const selection = window.getSelection();
+
+    // Header editor: always use execCommand
+    if (activeField?.id === 'headerEditor' && headerEditorRef.current) {
+      headerEditorRef.current.focus();
+      document.execCommand('underline', false);
+      setHeaderHtml(headerEditorRef.current.innerHTML);
+      return;
+    }
+
     if (selection && selection.toString().length > 0) {
       document.execCommand('underline', false);
       return;
@@ -587,6 +923,28 @@ export default function Home() {
   };
 
   const toggleOverline = () => {
+    // Header editor: apply overline via insertHTML
+    if (activeField?.id === 'headerEditor' && headerEditorRef.current) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        headerEditorRef.current.focus();
+        if (selection.toString().length > 0) {
+          try {
+            const range = selection.getRangeAt(0);
+            const span = document.createElement('span');
+            span.style.textDecoration = 'overline';
+            range.surroundContents(span);
+          } catch (e) {
+            const container = document.createElement('div');
+            container.appendChild(selection.getRangeAt(0).cloneContents());
+            document.execCommand('insertHTML', false, `<span style="text-decoration: overline">${container.innerHTML}</span>`);
+          }
+        }
+        setHeaderHtml(headerEditorRef.current.innerHTML);
+      }
+      return;
+    }
+
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) {
       try {
@@ -629,6 +987,26 @@ export default function Home() {
     if (!activeField) return;
 
     const { id, type, fieldName, fieldId, qId } = activeField;
+    const key = fieldName === 'dynamic' && fieldId ? fieldId : (fieldName || '');
+
+    // Header editor: use execCommand for alignment AND update state for UI buttons
+    if (id === 'headerEditor' && headerEditorRef.current) {
+      headerEditorRef.current.focus();
+      const cmdMap: Record<string, string> = {
+        'left': 'justifyLeft',
+        'center': 'justifyCenter',
+        'right': 'justifyRight',
+        'justify': 'justifyFull'
+      };
+      document.execCommand(cmdMap[align], false);
+      setHeaderHtml(headerEditorRef.current.innerHTML);
+      
+      // Update state so floating buttons show active
+      if (key) {
+        setHeaderAlignments(prev => ({ ...prev, [key]: align }));
+      }
+      return;
+    }
 
     if (type === 'header' && fieldName) {
       const key = fieldName === 'dynamic' && fieldId ? fieldId : fieldName;
@@ -710,8 +1088,8 @@ export default function Home() {
       let currentTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
-          const transcript = event.results[i][0].transcript.trim();
-          if (!transcript) return;
+          const transcript = event.results[i][0].transcript;
+          if (!transcript && transcript !== "") return;
           
           const fontClass = voiceLangRef.current === 'ar-SA' ? 'font-naskh' : voiceLangRef.current === 'ur-PK' ? 'font-nastaliq' : '';
           currentTranscript += fontClass ? `<span class="${fontClass}">${transcript}</span>` : transcript;
@@ -719,31 +1097,53 @@ export default function Home() {
       }
 
       if (currentTranscript) {
-        const activeEl = document.activeElement as HTMLElement;
-        if (activeEl && activeEl.contentEditable === 'true') {
-          // Add a space before if needed
+        // Use activeFieldRef to find the last active element if document.activeElement is not valid
+        let targetEl = document.activeElement as HTMLElement;
+        if (!targetEl || targetEl.contentEditable !== 'true') {
+          // Attempt to find element by ID from activeFieldRef
+          if (activeFieldRef.current) {
+            const { id, type, fieldName } = activeFieldRef.current;
+            // Since we don't have IDs on all elements, we rely on focus management
+            // In a real app, we'd use refs for each field.
+            // For now, we'll try to focus back if we have a record of it.
+          }
+        }
+
+        if (targetEl && targetEl.contentEditable === 'true') {
           const selection = window.getSelection();
           if (selection && selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             
-            // Check before
+            // Smart Selection Replacement: If text is selected, delete it first
+            if (!range.collapsed) {
+              range.deleteContents();
+            }
+            
             const preRange = range.cloneRange();
-            preRange.selectNodeContents(activeEl);
+            preRange.selectNodeContents(targetEl);
             preRange.setEnd(range.startContainer, range.startOffset);
             const textBefore = preRange.toString();
             const needsLeadingSpace = textBefore.length > 0 && !textBefore.endsWith(' ') && !textBefore.endsWith('\n');
 
-            // Check after
             const postRange = range.cloneRange();
-            postRange.selectNodeContents(activeEl);
+            postRange.selectNodeContents(targetEl);
             postRange.setStart(range.endContainer, range.endOffset);
             const textAfter = postRange.toString();
             const needsTrailingSpace = textAfter.length > 0 && !textAfter.startsWith(' ') && !textAfter.startsWith('\n');
             
             const htmlToInsert = (needsLeadingSpace ? '&nbsp;' : '') + currentTranscript + (needsTrailingSpace ? '&nbsp;' : '');
-            document.execCommand('insertHTML', false, htmlToInsert);
-          } else {
-            document.execCommand('insertHTML', false, currentTranscript);
+            
+            // Safer way to insert HTML
+            const fragment = range.createContextualFragment(htmlToInsert);
+            range.insertNode(fragment);
+            
+            // Move cursor to end of inserted content
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            // Trigger change detection for React
+            targetEl.dispatchEvent(new Event('input', { bubbles: true }));
           }
         }
       }
@@ -796,50 +1196,120 @@ export default function Home() {
   // --- Exports ---
   const exportPDF = async () => {
     if (!previewRef.current) return;
-    const canvas = await html2canvas(previewRef.current, { scale: 2 });
+    const canvas = await html2canvas(previewRef.current, { 
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false
+    });
+    
     const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(imgData);
+    
     const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    
+    const imgProps = pdf.getImageProperties(imgData);
+    const canvasHeightInPdf = (imgProps.height * pdfWidth) / imgProps.width;
+    
+    let heightLeft = canvasHeightInPdf;
+    let position = 0;
+    
+    // Add first page
+    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, canvasHeightInPdf);
+    heightLeft -= pdfHeight;
+    
+    // Add subsequent pages if needed
+    while (heightLeft > 0) {
+      position = heightLeft - canvasHeightInPdf;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, canvasHeightInPdf);
+      heightLeft -= pdfHeight;
+    }
+    
     pdf.save(`${header.madrasaName || 'Question'}_Paper.pdf`);
   };
 
+
+
   const exportWord = async () => {
+    const headerParagraphs: Paragraph[] = [];
+    
+    if (headerHtml) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(headerHtml, 'text/html');
+      
+      // Simple line extraction from rich editor
+      // We look for block elements or just use innerText split by newlines
+      const text = doc.body.innerText || "";
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l !== "");
+      
+      lines.forEach(line => {
+        headerParagraphs.push(new Paragraph({
+          children: [new TextRun({ text: line, bold: true })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 120 }
+        }));
+      });
+    } else {
+      // Fallback to legacy fields if rich editor is empty
+      headerParagraphs.push(new Paragraph({
+        text: header.madrasaName,
+        heading: HeadingLevel.HEADING_1,
+        alignment: AlignmentType.CENTER,
+      }));
+      headerParagraphs.push(new Paragraph({
+        text: header.examTitle,
+        alignment: AlignmentType.CENTER,
+      }));
+      header.fields.forEach(f => {
+        headerParagraphs.push(new Paragraph({
+          text: `${f.label}: ${f.value}`,
+          alignment: AlignmentType.CENTER,
+        }));
+      });
+    }
+
     const doc = new Document({
       sections: [{
         properties: {},
         children: [
-          new Paragraph({
-            text: header.madrasaName,
-            heading: HeadingLevel.HEADING_1,
-            alignment: AlignmentType.CENTER,
-          }),
-          new Paragraph({
-            text: header.examTitle,
-            alignment: AlignmentType.CENTER,
-          }),
-          ...header.fields.map(f => new Paragraph({
-            text: `${f.label}: ${f.value}`,
-            alignment: AlignmentType.CENTER,
-          })),
+          ...headerParagraphs,
           new Paragraph({
             text: "",
             border: { bottom: { color: "000000", space: 1, style: BorderStyle.SINGLE, size: 6 } },
+            spacing: { after: 400 }
           }),
-          ...questions.flatMap((q, index) => [
-            new Paragraph({
-              text: `${getQuestionLabel(index, paperLang)}: ${q.text.replace(/<[^>]*>/g, '')}`,
-              spacing: { before: 200 },
-            }),
-            ...q.subQuestions.map((sq, sIndex) =>
+          ...questions.flatMap((q, index) => {
+            if (q.isPageBreak) {
+              return [new Paragraph({ text: "", pageBreakBefore: true })];
+            }
+            return [
               new Paragraph({
-                text: `   (${getSubLabel(sIndex, paperLang)}) ${sq.text.replace(/<[^>]*>/g, '')}`,
-                indent: { left: 720 },
-              })
-            )
-          ]),
+                children: [
+                  new TextRun({ text: `${getQuestionLabel(index, paperLang)}: `, bold: true }),
+                  new TextRun(q.text.replace(/<[^>]*>/g, ''))
+                ],
+                spacing: { before: 240 },
+                alignment: q.alignment === 'center' ? AlignmentType.CENTER : 
+                           q.alignment === 'right' ? AlignmentType.RIGHT : 
+                           q.alignment === 'justify' ? AlignmentType.JUSTIFIED : AlignmentType.LEFT
+              }),
+              ...q.subQuestions.map((sq, sIndex) =>
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: `${sq.manualLabel || getSubLabel(sIndex, paperLang)} `, bold: true }),
+                    new TextRun(sq.text.replace(/<[^>]*>/g, ''))
+                  ],
+                  indent: { left: 720 },
+                  spacing: { before: 120 },
+                  alignment: sq.alignment === 'center' ? AlignmentType.CENTER : 
+                             sq.alignment === 'right' ? AlignmentType.RIGHT : 
+                             sq.alignment === 'justify' ? AlignmentType.JUSTIFIED : AlignmentType.LEFT
+                })
+              )
+            ];
+          }),
         ],
       }],
     });
@@ -851,10 +1321,6 @@ export default function Home() {
   const handlePrint = () => {
     window.print();
   };
-
-  const isRTL = paperLang === 'ar-SA' || paperLang === 'ur-PK' || paperLang === 'fa-IR';
-  const t = translations[paperLang];
-  const uiT = translations['bn-BD'];
 
   const getNativeNumber = (num: number, l: Language) => {
     const digits: Record<string, string[]> = {
@@ -918,16 +1384,16 @@ export default function Home() {
 
   return (
     <div className={`min-h-screen pb-20`}>
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 no-print">
-        <div className="max-w-ultra mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 no-print shadow-sm">
+        <div className="max-w-ultra mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3 py-3 md:h-16 md:py-0 px-4">
           <div className="flex items-center gap-3">
-            <div className="bg-emerald-600 p-2 rounded-xl text-white">
-              <FileText size={24} />
+            <div className="bg-emerald-600 p-2 rounded-xl text-white shadow-lg shadow-emerald-100">
+              <FileText size={20} className="md:w-6 md:h-6" />
             </div>
-            <h1 className="text-xl font-bold hidden md:block">{uiT.title}</h1>
+            <h1 className="text-lg md:text-xl font-bold text-slate-900">{uiT.title}</h1>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
             <div className="bg-slate-100 p-1 rounded-xl flex gap-1 no-print">
               {[
                 { code: 'bn-BD', label: 'বাংলা' },
@@ -937,10 +1403,7 @@ export default function Home() {
               ].map((l) => (
                 <button
                   key={l.code}
-                  onClick={() => {
-                    setPaperLang(l.code as Language);
-                    setVoiceLang(l.code as Language);
-                  }}
+                  onClick={() => { setPaperLang(l.code as Language); }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${paperLang === l.code ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   {l.label}
@@ -951,26 +1414,14 @@ export default function Home() {
             <div className="h-6 w-px bg-slate-200 mx-2 hidden md:block" />
 
             <div className="flex gap-2">
-              <button
-                onClick={resetPaper}
-                className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600"
-                title={uiT.reset}
-              >
+              <button onClick={resetPaper} className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600" title={uiT.reset}>
                 <RotateCcw size={16} /> <span className="hidden md:inline">{uiT.reset}</span>
               </button>
-
               <div className="h-8 w-px bg-slate-200 mx-1" />
-
-              <button
-                onClick={() => setView('edit')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${view === 'edit' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
+              <button onClick={() => setView('edit')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${view === 'edit' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                 <Edit3 size={16} /> {uiT.edit}
               </button>
-              <button
-                onClick={() => setView('preview')}
-                className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${view === 'preview' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
+              <button onClick={() => setView('preview')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${view === 'preview' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                 <Eye size={16} /> {uiT.preview}
               </button>
             </div>
@@ -981,118 +1432,122 @@ export default function Home() {
       <main className="max-w-ultra mx-auto px-4 py-8">
         <AnimatePresence mode="wait">
           {view === 'edit' ? (
-            <motion.div
-              key="edit"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-8 no-print"
-            >
-              <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold flex items-center gap-2">
-                    <Edit3 size={20} className="text-emerald-600" /> Header Details
+            <motion.div key="edit" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8 no-print">
+
+              <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-slate-200">
+                  <h2 className="text-lg font-bold flex items-center gap-2 text-slate-800">
+                    <Edit3 size={20} className="text-emerald-600" />
+                    হেডার সেকশন
                   </h2>
-                  <button onClick={saveDraft} className="btn-secondary text-sm">
-                    <Save size={16} /> {uiT.saveDraft}
-                  </button>
-                </div>
-
-                <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${isRTL ? 'rtl' : 'ltr'}`}>
-                  <div className="md:col-span-2 relative">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">{t.madrasaName}</label>
-                    <div className="relative">
-                      <EditableText
-                        value={header.madrasaName}
-                        onChange={(val: string) => setHeader({ ...header, madrasaName: val })}
-                        onFocus={() => setActiveField({ id: 'madrasaName', type: 'header', fieldName: 'madrasaName' })}
-                        style={{
-                          fontSize: `${headerSizes.madrasaName || 24}px`,
-                          fontWeight: headerWeights.madrasaName ? 'bold' : 'normal',
-                          textDecoration: `${headerUnderlines.madrasaName ? 'underline' : ''} ${headerOverlines.madrasaName ? 'overline' : ''}`.trim(),
-                          textAlign: headerAlignments.madrasaName || (isRTL ? 'right' : 'left')
-                        }}
-                        className={`input-field min-h-[44px] ${getFontClass(paperLang)}`}
-                        placeholder={t.madrasaName}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="relative">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">{t.examTitle}</label>
-                    <div className="relative">
-                      <EditableText
-                        value={header.examTitle}
-                        onChange={(val: string) => setHeader({ ...header, examTitle: val })}
-                        onFocus={() => setActiveField({ id: 'examTitle', type: 'header', fieldName: 'examTitle' })}
-                        style={{
-                          fontSize: `${headerSizes.examTitle || 20}px`,
-                          fontWeight: headerWeights.examTitle ? 'bold' : 'normal',
-                          textDecoration: `${headerUnderlines.examTitle ? 'underline' : ''} ${headerOverlines.examTitle ? 'overline' : ''}`.trim(),
-                          textAlign: headerAlignments.examTitle || (isRTL ? 'right' : 'left')
-                        }}
-                        className="input-field min-h-[44px]"
-                        placeholder={t.examTitle}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {header.fields?.map((f) => (
-                      <div key={f.id} className="relative group bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <div className="flex items-center justify-between mb-1">
-                          <input
-                            type="text"
-                            value={f.label}
-                            onChange={(e) => updateHeaderField(f.id, 'label', e.target.value)}
-                            className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-transparent outline-none focus:text-emerald-600 w-full"
-                            placeholder="বক্সের নাম"
-                          />
-                          <button
-                            onClick={() => removeHeaderField(f.id)}
-                            className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                          <EditableText
-                            value={f.value}
-                            onChange={(val: string) => updateHeaderField(f.id, 'value', val)}
-                            onFocus={() => setActiveField({ id: f.id, type: 'header', fieldName: 'dynamic', fieldId: f.id })}
-                            style={{
-                              fontSize: `${headerSizes[f.id] || 16}px`,
-                              fontWeight: headerWeights[f.id] ? 'bold' : 'normal',
-                              textDecoration: `${headerUnderlines[f.id] ? 'underline' : ''} ${headerOverlines[f.id] ? 'overline' : ''}`.trim(),
-                              textAlign: headerAlignments[f.id] || (isRTL ? 'right' : 'left')
-                            }}
-                            className="w-full bg-white rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-500 transition-all min-h-[40px]"
-                            placeholder={f.label}
-                          />
-                      </div>
-                    ))}
-                    <button
-                      onClick={addHeaderField}
-                      className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-4 text-slate-400 hover:border-emerald-300 hover:text-emerald-600 transition-all gap-1"
-                    >
-                      <Plus size={20} />
-                      <span className="text-[10px] font-bold uppercase">নতুন বক্স</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={backupHeader} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all flex items-center gap-1" title="হেডার ব্যাকআপ করুন">
+                      <Download size={14} /> ব্যাকআপ
                     </button>
+                    <button onClick={() => restoreInputRef.current?.click()} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all flex items-center gap-1" title="ব্যাকআপ থেকে রিস্টোর করুন">
+                      <Upload size={14} /> রিস্টোর
+                    </button>
+                    <input
+                      ref={restoreInputRef}
+                      type="file"
+                      accept=".qheader,.json"
+                      onChange={restoreHeader}
+                      className="hidden"
+                    />
+                    <button onClick={saveDraft} className="btn-secondary text-sm"><Save size={16} /> {uiT.saveDraft}</button>
+                    {headerHtml && (
+                      <button
+                        onClick={() => {
+                          setHeaderHtml('');
+                          if (headerEditorRef.current) headerEditorRef.current.innerHTML = '';
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-500 hover:bg-red-100 transition-all flex items-center gap-1"
+                      >
+                        <Trash2 size={14} /> ক্লিয়ার
+                      </button>
+                    )}
                   </div>
+                </div>
+                <div className="p-4">
+                  <div className="text-xs text-slate-400 mb-2 flex items-center gap-1.5">
+                    <Globe size={12} />
+                    <span>সরাসরি টাইপ করুন অথবা Word ফাইল থেকে কপি-পেস্ট করুন — ফরম্যাটিং সংরক্ষিত থাকবে</span>
+                  </div>
+                  <div
+                    ref={headerEditorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    className={`header-rich-editor input-field min-h-[180px] p-6 ${getFontClass(paperLang)} ${isRTL ? 'rtl' : 'ltr'}`}
+                    style={{ fontSize: `${headerBaseFontSize}px` }}
+                    data-placeholder="এখানে হেডার টাইপ করুন বা Word থেকে পেস্ট করুন..."
+                    onInput={(e) => {
+                      setHeaderHtml(e.currentTarget.innerHTML);
+                    }}
+                    onFocus={() => setActiveField({ id: 'headerEditor', type: 'header', fieldName: 'madrasaName' })}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const clipboardData = e.clipboardData;
+                      
+                      // Try HTML first (Word copies as HTML)
+                      let html = clipboardData.getData('text/html');
+                      
+                      if (html) {
+                        // Sanitize Word HTML
+                        const sanitized = sanitizeWordHtml(html);
+                        
+                        // Insert at cursor position
+                        const selection = window.getSelection();
+                        if (selection && selection.rangeCount > 0) {
+                          const range = selection.getRangeAt(0);
+                          range.deleteContents();
+                          
+                          const fragment = range.createContextualFragment(sanitized);
+                          range.insertNode(fragment);
+                          
+                          // Move cursor to end
+                          range.collapse(false);
+                          selection.removeAllRanges();
+                          selection.addRange(range);
+                        }
+                      } else {
+                        // Fallback to plain text
+                        const text = clipboardData.getData('text/plain');
+                        const selection = window.getSelection();
+                        if (selection && selection.rangeCount > 0) {
+                          const range = selection.getRangeAt(0);
+                          range.deleteContents();
+                          // Convert newlines to <br> for plain text
+                          const lines = text.split('\n');
+                          const fragment = document.createDocumentFragment();
+                          lines.forEach((line, i) => {
+                            fragment.appendChild(document.createTextNode(line));
+                            if (i < lines.length - 1) {
+                              fragment.appendChild(document.createElement('br'));
+                            }
+                          });
+                          range.insertNode(fragment);
+                          range.collapse(false);
+                          selection.removeAllRanges();
+                          selection.addRange(range);
+                        }
+                      }
+                      
+                      // Update state
+                      if (headerEditorRef.current) {
+                        setHeaderHtml(headerEditorRef.current.innerHTML);
+                      }
+                    }}
+                  />
                 </div>
               </section>
 
+
               <section className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <FileText size={24} className="text-emerald-600" /> {t.question} List
-                  </h2>
+                  <h2 className="text-xl font-bold flex items-center gap-2"><FileText size={24} className="text-emerald-600" /> {t.question} List</h2>
                   <div className="flex gap-2">
-                    <button onClick={addPageBreak} className="btn-secondary">
-                      <RotateCcw size={18} className="rotate-90" /> {uiT.addPageBreak || 'Add Page Break'}
-                    </button>
-                    <button onClick={addQuestion} className="btn-primary">
-                      <Plus size={18} /> {uiT.addQuestion}
-                    </button>
+                    <button onClick={addPageBreak} className="btn-secondary"><RotateCcw size={18} className="rotate-90" /> {uiT.addPageBreak || 'Add Page Break'}</button>
+                    <button onClick={addQuestion} className="btn-primary"><Plus size={18} /> {uiT.addQuestion}</button>
                   </div>
                 </div>
 
@@ -1103,34 +1558,27 @@ export default function Home() {
                         <div key={q.id} className="flex items-center gap-4 no-print py-4">
                           <div className="flex-1 h-px bg-slate-200 border-dashed border-b-2" />
                           <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Next Page Starts Here</span>
-                          <button onClick={() => removeQuestion(q.id)} className="text-slate-300 hover:text-red-500">
-                            <Trash2 size={16} />
-                          </button>
+                          <button onClick={() => removeQuestion(q.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={16} /></button>
                           <div className="flex-1 h-px bg-slate-200 border-dashed border-b-2" />
                         </div>
                       ) : (
                         <div key={q.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative group">
                           <div className="flex items-start gap-4">
-                            <div className="bg-emerald-100 text-emerald-700 w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0">
-                              {getNativeNumber(index + 1, paperLang)}
-                            </div>
+                            <div className="bg-emerald-100 text-emerald-700 w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0">{getNativeNumber(index + 1, paperLang)}</div>
                             <div className="flex-1 space-y-4">
-                              <div className="relative">
-                                <EditableText
-                                  value={q.text}
-                                  onChange={(val: string) => updateQuestionText(q.id, val)}
-                                  onFocus={() => setActiveField({ id: q.id, type: 'question' })}
-                                  style={{
-                                    fontSize: `${q.fontSize || 18}px`,
-                                    fontWeight: q.isBold ? 'bold' : 'normal',
-                                    textDecoration: `${q.isUnderline ? 'underline' : ''} ${q.isOverline ? 'overline' : ''}`.trim(),
-                                    textAlign: q.alignment || (isRTL ? 'right' : 'left')
-                                  }}
-                                  className={`input-field min-h-[80px] p-4 ${getFontClass(paperLang)}`}
-                                  placeholder={t.placeholderQuestion}
-                                />
-                              </div>
-
+                              <EditableText
+                                value={q.text}
+                                onChange={(val: string) => updateQuestionText(q.id, val)}
+                                onFocus={() => setActiveField({ id: q.id, type: 'question' })}
+                                style={{
+                                  fontSize: `${q.fontSize || 18}px`,
+                                  fontWeight: q.isBold ? 'bold' : 'normal',
+                                  textDecoration: `${q.isUnderline ? 'underline' : ''} ${q.isOverline ? 'overline' : ''}`.trim(),
+                                  textAlign: q.alignment || (isRTL ? 'right' : 'left')
+                                }}
+                                className={`input-field min-h-[80px] p-4 ${getFontClass(paperLang)}`}
+                                placeholder={t.placeholderQuestion}
+                              />
                               <div className="pl-6 border-l-2 border-slate-100 space-y-3">
                                 {q.subQuestions.map((sq, sqIndex) => (
                                   <div key={sq.id} className="flex gap-2">
@@ -1140,24 +1588,20 @@ export default function Home() {
                                       onChange={(e) => updateSubQuestionLabel(q.id, sq.id, e.target.value)}
                                       className="w-12 text-slate-400 mt-1 font-medium bg-transparent outline-none text-center"
                                     />
-                                    <div className="relative flex-1">
-                                      <EditableText
-                                        value={sq.text}
-                                        onChange={(val: string) => updateSubQuestionText(q.id, sq.id, val)}
-                                        onFocus={() => setActiveField({ id: sq.id, type: 'subquestion', qId: q.id })}
-                                        style={{
-                                          fontSize: `${sq.fontSize || 16}px`,
-                                          fontWeight: sq.isBold ? 'bold' : 'normal',
-                                          textDecoration: `${sq.isUnderline ? 'underline' : ''} ${sq.isOverline ? 'overline' : ''}`.trim(),
-                                          textAlign: sq.alignment || (isRTL ? 'right' : 'left')
-                                        }}
-                                        className={`input-field min-h-[40px] p-2 ${getFontClass(paperLang)}`}
-                                        placeholder={t.placeholderSubQuestion}
-                                      />
-                                    </div>
-                                    <button onClick={() => removeSubQuestion(q.id, sq.id)} className="text-slate-300 hover:text-red-500 p-2 transition-colors">
-                                      <Trash2 size={16} />
-                                    </button>
+                                    <EditableText
+                                      value={sq.text}
+                                      onChange={(val: string) => updateSubQuestionText(q.id, sq.id, val)}
+                                      onFocus={() => setActiveField({ id: sq.id, type: 'subquestion', qId: q.id })}
+                                      style={{
+                                        fontSize: `${sq.fontSize || 16}px`,
+                                        fontWeight: sq.isBold ? 'bold' : 'normal',
+                                        textDecoration: `${sq.isUnderline ? 'underline' : ''} ${sq.isOverline ? 'overline' : ''}`.trim(),
+                                        textAlign: sq.alignment || (isRTL ? 'right' : 'left')
+                                      }}
+                                      className={`input-field min-h-[40px] p-2 ${getFontClass(paperLang)} flex-1`}
+                                      placeholder={t.placeholderSubQuestion}
+                                    />
+                                    <button onClick={() => removeSubQuestion(q.id, sq.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={16} /></button>
                                   </div>
                                 ))}
                                 <button onClick={() => addSubQuestion(q.id)} className="text-emerald-600 hover:text-emerald-700 text-sm font-bold flex items-center gap-1 mt-2">
@@ -1165,11 +1609,7 @@ export default function Home() {
                                 </button>
                               </div>
                             </div>
-
-                            <button
-                              onClick={() => removeQuestion(q.id)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-2 transition-all"
-                            >
+                            <button onClick={() => removeQuestion(q.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-2 transition-all">
                               <Trash2 size={20} />
                             </button>
                           </div>
@@ -1181,144 +1621,93 @@ export default function Home() {
               </section>
             </motion.div>
           ) : (
-            <motion.div
-              key="preview"
-              className="space-y-8"
-            >
-              <div className="flex flex-wrap items-center justify-center gap-4 no-print">
-                <button onClick={exportPDF} className="btn-primary">
-                  <Download size={18} /> {uiT.downloadPDF}
-                </button>
-                <button onClick={exportWord} className="btn-primary bg-blue-600 hover:bg-blue-700">
-                  <FileText size={18} /> {uiT.downloadWord}
-                </button>
-                <button onClick={handlePrint} className="btn-secondary">
-                  <Printer size={18} /> {uiT.print}
-                </button>
+            <motion.div key="preview" className="space-y-8">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-center gap-3 md:gap-4 no-print">
+                <button onClick={exportPDF} className="btn-primary text-xs sm:text-sm"><Download size={16} /> {uiT.downloadPDF}</button>
+                <button onClick={exportWord} className="btn-primary bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm"><FileText size={16} /> {uiT.downloadWord}</button>
+                <button onClick={handlePrint} className="btn-secondary text-xs sm:text-sm col-span-2 sm:col-span-1"><Printer size={16} /> {uiT.print}</button>
               </div>
 
-              <div
-                ref={previewRef}
-                className={`paper-preview print-area ${isRTL ? 'rtl' : 'ltr'}`}
-                id="printable-paper"
-              >
-                <div className="text-center space-y-2 mb-6">
-                  <h1
-                    contentEditable
-                    suppressContentEditableWarning
-                    onBlur={(e) => setHeader({ ...header, madrasaName: e.currentTarget.innerHTML })}
-                    style={{
-                      fontSize: `${headerSizes.madrasaName || 24}px`,
-                      fontWeight: headerWeights.madrasaName ? 'bold' : 'normal',
-                      textDecoration: `${headerUnderlines.madrasaName ? 'underline' : ''} ${headerOverlines.madrasaName ? 'overline' : ''}`.trim(),
-                      textAlign: headerAlignments.madrasaName || (isRTL ? 'right' : 'left')
-                    }}
-                    className={`outline-none hover:bg-slate-50 transition-colors rounded px-2 py-1 ${getFontClass(paperLang)}`}
-                    dangerouslySetInnerHTML={{ __html: header.madrasaName || 'Madrasa Name' }}
-                  />
-                  <h2
-                    contentEditable
-                    suppressContentEditableWarning
-                    onBlur={(e) => setHeader({ ...header, examTitle: e.currentTarget.innerHTML })}
-                    style={{
-                      fontSize: `${headerSizes.examTitle || 20}px`,
-                      fontWeight: headerWeights.examTitle ? 'bold' : 'normal',
-                      textDecoration: `${headerUnderlines.examTitle ? 'underline' : ''} ${headerOverlines.examTitle ? 'overline' : ''}`.trim(),
-                      textAlign: headerAlignments.examTitle || (isRTL ? 'right' : 'left')
-                    }}
-                    className={`outline-none hover:bg-slate-50 transition-colors rounded px-2 py-1 ${getFontClass(paperLang)}`}
-                    dangerouslySetInnerHTML={{ __html: header.examTitle || 'Exam Title' }}
-                  />
-                </div>
-
-                <div className="border-b-2 border-slate-900 pb-4 mb-8">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-y-2 gap-x-4">
-                    {header.fields?.map(f => (
-                      <div key={f.id} className="flex gap-2 text-sm">
-                        <span
-                          contentEditable
-                          suppressContentEditableWarning
-                          onBlur={(e) => updateHeaderField(f.id, 'label', e.currentTarget.textContent || '')}
-                          className="font-bold whitespace-nowrap outline-none hover:bg-slate-50 px-1 rounded"
-                        >
-                          {f.label}
-                        </span>
-                        <span className="font-bold -ml-2">:</span>
-                        <span
-                          contentEditable
-                          suppressContentEditableWarning
-                          onBlur={(e) => updateHeaderField(f.id, 'value', e.currentTarget.innerHTML)}
-                          style={{
-                            fontSize: `${headerSizes[f.id] || 16}px`,
-                            fontWeight: headerWeights[f.id] ? 'bold' : 'normal',
-                            textDecoration: `${headerUnderlines[f.id] ? 'underline' : ''} ${headerOverlines[f.id] ? 'overline' : ''}`.trim(),
-                            textAlign: headerAlignments[f.id] || (isRTL ? 'right' : 'left')
-                          }}
-                          className="outline-none hover:bg-slate-50 px-1 rounded flex-1 min-w-[20px]"
-                          dangerouslySetInnerHTML={{ __html: f.value }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-8">
-                  {questions.map((q, index) => (
-                    q.isPageBreak ? (
-                      <div key={q.id} className="page-break" style={{ breakBefore: 'page', height: '20px' }} />
-                    ) : (
-                      <div key={q.id} className="space-y-4">
-                        <div className="flex gap-3">
-                          <span className="font-bold whitespace-nowrap" style={{ fontSize: `${q.fontSize || 18}px` }}>{getQuestionLabel(index, paperLang)}:</span>
-                          <p
-                            contentEditable
-                            suppressContentEditableWarning
-                            onBlur={(e) => updateQuestionText(q.id, e.currentTarget.innerHTML)}
-                            style={{
-                              fontSize: `${q.fontSize || 18}px`,
-                              fontWeight: q.isBold ? 'bold' : 'normal',
-                              textDecoration: `${q.isUnderline ? 'underline' : ''} ${q.isOverline ? 'overline' : ''}`.trim(),
-                              textAlign: q.alignment || (isRTL ? 'right' : 'left')
-                            }}
-                            className={`flex-1 outline-none hover:bg-slate-50 transition-colors rounded px-2 py-1 -mt-1 ${getFontClass(paperLang)} leading-relaxed`}
-                            dangerouslySetInnerHTML={{ __html: q.text }}
-                          />
+              <div className="preview-container">
+                <div ref={previewRef} id="printable-paper" className="w-full flex flex-col items-center">
+                  {questions.reduce((acc, q) => {
+                    if (q.isPageBreak) {
+                      acc.push([]);
+                    } else {
+                      acc[acc.length - 1].push(q);
+                    }
+                    return acc;
+                  }, [[]] as Question[][]).map((pageQuestions, pageIndex) => (
+                    <React.Fragment key={pageIndex}>
+                      {pageIndex > 0 && (
+                        <div className="w-full flex items-center justify-center gap-4 my-12 no-print">
+                          <div className="h-px flex-1 bg-slate-300" />
+                          <span className="px-4 py-1 rounded-full bg-slate-200 text-slate-500 text-xs font-bold uppercase tracking-widest">পরবর্তী পাতা</span>
+                          <div className="h-px flex-1 bg-slate-300" />
                         </div>
+                      )}
+                      <div 
+                        className={`paper-preview print-area ${isRTL ? 'rtl' : 'ltr'} shadow-2xl relative`}
+                        style={{ breakAfter: 'page' }}
+                      >
+                      {pageIndex === 0 && (
+                        headerHtml ? (
+                          <div
+                            className={`preview-header-content border-b-2 border-slate-900 pb-4 mb-8 ${getFontClass(paperLang)} ${isRTL ? 'rtl' : 'ltr'}`}
+                            style={{ fontSize: `${headerBaseFontSize}px` }}
+                            dangerouslySetInnerHTML={{ __html: headerHtml }}
+                          />
+                        ) : (
+                          <div className="text-center text-slate-400 italic border-b-2 border-slate-900 pb-4 mb-8 py-6">
+                            হেডার সেকশনে কিছু লিখুন বা পেস্ট করুন
+                          </div>
+                        )
+                      )}
 
-                        {q.subQuestions.length > 0 && (
-                          <div className="grid grid-cols-1 gap-3 pl-8">
-                            {q.subQuestions.map((sq, sqIndex) => (
-                              <div key={sq.id} className="flex gap-3">
-                                <span
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => updateSubQuestionLabel(q.id, sq.id, e.currentTarget.textContent || '')}
-                                  className="font-medium whitespace-nowrap outline-none hover:bg-slate-50 px-1 rounded"
-                                  style={{
-                                    fontSize: `${sq.fontSize || 16}px`,
-                                    fontWeight: sq.isBold ? 'bold' : 'normal'
-                                  }}
-                                >
-                                  {sq.manualLabel || getSubLabel(sqIndex, paperLang)}
-                                </span>
+                      <div className="space-y-8">
+                        {pageQuestions.map((q, qIndex) => {
+                          // Find original index for label
+                          const originalIndex = questions.findIndex(origQ => origQ.id === q.id);
+                          return (
+                            <div key={q.id} className="space-y-4">
+                              <div className="flex gap-3">
+                                <span className="font-bold whitespace-nowrap" style={{ fontSize: `${q.fontSize || 18}px` }}>{getQuestionLabel(originalIndex, paperLang)}:</span>
                                 <p
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => updateSubQuestionText(q.id, sq.id, e.currentTarget.innerHTML)}
-                                  style={{ 
-                                    fontSize: `${sq.fontSize || 16}px`,
-                                    textAlign: sq.alignment || (isRTL ? 'right' : 'left')
+                                  contentEditable suppressContentEditableWarning
+                                  onBlur={(e) => updateQuestionText(q.id, e.currentTarget.innerHTML)}
+                                  style={{
+                                    fontSize: `${q.fontSize || 18}px`,
+                                    fontWeight: q.isBold ? 'bold' : 'normal',
+                                    textDecoration: `${q.isUnderline ? 'underline' : ''} ${q.isOverline ? 'overline' : ''}`.trim(),
+                                    textAlign: q.alignment || (isRTL ? 'right' : 'left')
                                   }}
-                                  className={`flex-1 outline-none hover:bg-slate-50 transition-colors rounded px-2 py-1 -mt-1 ${getFontClass(paperLang)}`}
-                                  dangerouslySetInnerHTML={{ __html: sq.text }}
+                                  className={`flex-1 outline-none hover:bg-slate-50 transition-colors rounded px-2 py-1 ${getFontClass(paperLang)} leading-relaxed`}
+                                  dangerouslySetInnerHTML={{ __html: q.text }}
                                 />
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              {q.subQuestions.length > 0 && (
+                                <div className="grid grid-cols-1 gap-3 pl-8">
+                                  {q.subQuestions.map((sq, sqIndex) => (
+                                    <div key={sq.id} className="flex gap-3">
+                                      <span className="font-medium whitespace-nowrap">{sq.manualLabel || getSubLabel(sqIndex, paperLang)}</span>
+                                      <p
+                                        contentEditable suppressContentEditableWarning
+                                        onBlur={(e) => updateSubQuestionText(q.id, sq.id, e.currentTarget.innerHTML)}
+                                        style={{ fontSize: `${sq.fontSize || 16}px`, textAlign: sq.alignment || (isRTL ? 'right' : 'left') }}
+                                        className={`flex-1 outline-none hover:bg-slate-50 transition-colors rounded px-2 py-1 ${getFontClass(paperLang)}`}
+                                        dangerouslySetInnerHTML={{ __html: sq.text }}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    )
-                  ))}
+                    </div>
+                  </React.Fragment>
+                ))}
                 </div>
               </div>
             </motion.div>
@@ -1326,157 +1715,148 @@ export default function Home() {
         </AnimatePresence>
       </main>
 
-      {/* Floating Sidebar */}
-      <div className="fixed right-2 xl:right-4 2xl:right-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 no-print z-50">
-        <div className="bg-white p-3 rounded-2xl shadow-2xl border border-slate-100 flex flex-col gap-4">
-          <button
-            onClick={toggleRecording}
-            className={`p-4 rounded-xl transition-all duration-300 shadow-lg ${isRecording ? 'bg-red-500 text-white animate-pulse scale-110' : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-105'}`}
-            title={t.voiceStart}
-          >
-            {isRecording ? <MicOff size={24} /> : <Mic size={24} />}
-          </button>
+      {/* International-Standard Floating Control Bar */}
+      <div className="floating-sidebar no-print" style={{
+        position: 'fixed',
+        bottom: '24px',
+        left: '20px',
+        right: '20px',
+        display: 'flex',
+        justifyContent: 'center',
+        zIndex: 100,
+        pointerEvents: 'none'
+      }}>
+        <div className="control-panel" style={{
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(24px) saturate(200%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(200%)',
+          border: '1px solid rgba(255, 255, 255, 0.5)',
+          boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.05)',
+          borderRadius: '32px',
+          display: 'flex',
+          flexDirection: 'row' as const,
+          padding: '10px 20px',
+          gap: '14px',
+          width: 'auto',
+          maxWidth: '95vw',
+          justifyContent: 'center',
+          overflowX: 'auto' as const,
+          pointerEvents: 'auto' as const
+        }}>
+          {/* 6. Alignment Tools (Leftmost) - hidden on narrow screens */}
+          {isWideScreen && (
+          <div className="tool-group">
+            <button
+              onClick={() => updateAlignment('left')}
+              className={`control-btn ${getAlignmentActive() === 'left' ? 'active' : ''}`}
+            >
+              <AlignLeft size={18} />
+            </button>
+            <button
+              onClick={() => updateAlignment('center')}
+              className={`control-btn ${getAlignmentActive() === 'center' ? 'active' : ''}`}
+            >
+              <AlignCenter size={18} />
+            </button>
+            <button
+              onClick={() => updateAlignment('right')}
+              className={`control-btn ${getAlignmentActive() === 'right' ? 'active' : ''}`}
+            >
+              <AlignRight size={18} />
+            </button>
+            <button
+              onClick={() => updateAlignment('justify')}
+              className={`control-btn ${getAlignmentActive() === 'justify' ? 'active' : ''}`}
+            >
+              <AlignJustify size={18} />
+            </button>
+          </div>
+          )}
 
-          <div className="h-px bg-slate-100 mx-2" />
+          {/* 5. Size Tools - hidden on narrow screens */}
+          {isWideScreen && (
+          <div className="tool-group">
+            <button
+              onClick={() => adjustFontSize(2)}
+              className="control-btn"
+              title="A+"
+            >
+              <span className="font-bold">A+</span>
+            </button>
+            <button
+              onClick={() => adjustFontSize(-2)}
+              className="control-btn"
+              title="A-"
+            >
+              <span className="font-bold">A-</span>
+            </button>
+          </div>
+          )}
 
-          {/* Language Selection Buttons */}
-          <div className="flex flex-col gap-2">
+          {/* 4. Underline & Overline Tools - hidden on narrow screens */}
+          {isWideScreen && (
+          <div className="tool-group">
+            <button
+              onClick={toggleUnderline}
+              className={`control-btn ${isFormatActive('underline') ? 'active' : ''}`}
+            >
+              <span className="underline text-lg">U</span>
+            </button>
+            <button
+              onClick={toggleOverline}
+              className={`control-btn ${isFormatActive('overline') ? 'active' : ''}`}
+            >
+              <span className="overline text-lg">O</span>
+            </button>
+          </div>
+          )}
+
+          {/* 3. Bold Tool - hidden on narrow screens */}
+          {isWideScreen && (
+          <div className="tool-group">
+            <button
+              onClick={toggleBold}
+              className={`control-btn ${isFormatActive('bold') ? 'active' : ''}`}
+            >
+              <span className="font-bold text-lg">B</span>
+            </button>
+          </div>
+          )}
+
+          {/* 2. Lang Tools */}
+          <div className="tool-group">
             {[
-              { code: 'bn-BD', label: 'বাংলা' },
-              { code: 'en-US', label: 'English' },
-              { code: 'ar-SA', label: 'العربية' },
-              { code: 'ur-PK', label: 'اردو' }
+              { code: 'ur-PK', label: 'UR' },
+              { code: 'ar-SA', label: 'AR' },
+              { code: 'en-US', label: 'EN' },
+              { code: 'bn-BD', label: 'BN' }
             ].map((l) => (
               <button
                 key={l.code}
-                onClick={() => setVoiceLang(l.code as Language)}
-                className={`w-full px-3 py-2 rounded-xl text-[10px] font-bold transition-all shadow-sm whitespace-nowrap ${voiceLang === l.code ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-emerald-50'}`}
+                onClick={() => {
+                  setVoiceLang(l.code as Language);
+                }}
+                className={`control-btn control-btn-large ${voiceLang === l.code ? 'active' : ''}`}
               >
                 {l.label}
               </button>
             ))}
           </div>
 
-          <div className="h-px bg-slate-100 mx-2" />
-
-          {/* Font Size Controls */}
-          <div className="flex flex-col gap-2">
+          {/* 1. Voice Tool (Rightmost) */}
+          <div className="tool-group">
             <button
-              onClick={() => adjustFontSize(2)}
-              className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:text-emerald-600 font-bold transition-all shadow-sm flex items-center justify-center"
-              title="Increase Font Size"
+              onClick={toggleRecording}
+              className={`control-btn ${isRecording ? 'active' : ''}`}
+              title={t.voiceStart}
             >
-              A+
-            </button>
-            <button
-              onClick={() => adjustFontSize(-2)}
-              className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:text-emerald-600 font-bold transition-all shadow-sm flex items-center justify-center"
-              title="Decrease Font Size"
-            >
-              A-
+              {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
             </button>
           </div>
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={toggleBold}
-            className="p-3 rounded-xl bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm font-bold text-lg"
-            title="Toggle Bold"
-          >
-            B
-          </button>
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={toggleUnderline}
-            className="p-3 rounded-xl bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm font-bold text-lg"
-            title="Toggle Underline"
-            style={{ textDecoration: 'underline' }}
-          >
-            U
-          </button>
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={toggleOverline}
-            className="p-3 rounded-xl bg-slate-50 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all shadow-sm font-bold text-lg"
-            title="Toggle Overline"
-            style={{ textDecoration: 'overline' }}
-          >
-            O
-          </button>
-
-          <div className="h-px bg-slate-100 mx-2" />
-
-          {/* Alignment Controls */}
-          <div className="grid grid-cols-2 gap-1 px-1">
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => updateAlignment('left')}
-              className={`p-2 rounded-lg transition-all flex items-center justify-center ${activeField ? 'bg-slate-50 text-slate-600 hover:bg-indigo-50' : 'bg-slate-50/50 text-slate-300 cursor-not-allowed'}`}
-              title="Align Left"
-            >
-              <AlignLeft size={16} />
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => updateAlignment('center')}
-              className={`p-2 rounded-lg transition-all flex items-center justify-center ${activeField ? 'bg-slate-50 text-slate-600 hover:bg-indigo-50' : 'bg-slate-50/50 text-slate-300 cursor-not-allowed'}`}
-              title="Align Center"
-            >
-              <AlignCenter size={16} />
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => updateAlignment('right')}
-              className={`p-2 rounded-lg transition-all flex items-center justify-center ${activeField ? 'bg-slate-50 text-slate-600 hover:bg-indigo-50' : 'bg-slate-50/50 text-slate-300 cursor-not-allowed'}`}
-              title="Align Right"
-            >
-              <AlignRight size={16} />
-            </button>
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => updateAlignment('justify')}
-              className={`p-2 rounded-lg transition-all flex items-center justify-center ${activeField ? 'bg-slate-50 text-slate-600 hover:bg-indigo-50' : 'bg-slate-50/50 text-slate-300 cursor-not-allowed'}`}
-              title="Align Justify"
-            >
-              <AlignJustify size={16} />
-            </button>
-          </div>
-
-          <div className="h-px bg-slate-100 mx-2" />
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => applyFont('font-naskh')}
-            className="p-3 rounded-xl bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:text-emerald-600 transition-all shadow-sm font-bold text-xs"
-            title="Arabic Font (Naskh)"
-          >
-            ع
-          </button>
-
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => applyFont('font-nastaliq')}
-            className="p-3 rounded-xl bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:text-emerald-600 transition-all shadow-sm font-bold text-xs"
-            title="Urdu Font (Nastaliq)"
-          >
-            اردو
-          </button>
         </div>
-
-        {isRecording && (
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-xs font-bold shadow-sm whitespace-nowrap border border-red-100"
-          >
-            {t.voiceStart}
-          </motion.div>
-        )}
       </div>
 
-      {/* Custom Modal */}
+      {/* Premium Custom Modal */}
       <AnimatePresence>
         {modal.isOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1488,9 +1868,9 @@ export default function Home() {
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
             >
               <div className="p-8">
@@ -1523,33 +1903,19 @@ export default function Home() {
                       </button>
                     </>
                   ) : (
-                    <button
-                      onClick={() => setModal(prev => ({ ...prev, isOpen: false }))}
-                      className="w-full px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all"
-                    >
-                      ঠিক আছে
-                    </button>
+                    <button onClick={() => setModal(prev => ({ ...prev, isOpen: false }))} className="w-full px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all">ঠিক আছে</button>
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => setModal(prev => ({ ...prev, isOpen: false }))}
-                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <button onClick={() => setModal(prev => ({ ...prev, isOpen: false }))} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Printing Styles */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          @page {
-            margin: 0;
-            size: auto;
-          }
+          @page { margin: 0; size: auto; }
         }
       ` }} />
     </div>

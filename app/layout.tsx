@@ -25,8 +25,8 @@ const crimson = Crimson_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "Madrasa Question Maker AI",
-  description: "Advanced AI-powered Madrasa Question Generator",
+  title: "Easy question maker",
+  description: "Advanced AI-powered Question Generator",
 };
 
 export default function RootLayout({
