@@ -1190,10 +1190,19 @@ export default function Home() {
       return;
     }
 
-    startRecognition();
-  };
+    const startRecognition = () => {
+      if (!recognitionRef.current) return;
+      recognitionRef.current.start();
+    };
 
-  // --- Exports ---
+    const getDownloadFileName = (ext: string) => {
+      const now = new Date();
+      const timeStr = `${now.getHours()}-${now.getMinutes()}-${now.getSeconds()}`;
+      const dateStr = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
+      return `Easy_question_maker_${timeStr}_${dateStr}.${ext}`;
+    };
+
+    // --- Exports ---
   const exportPDF = async () => {
     if (!previewRef.current) return;
     const canvas = await html2canvas(previewRef.current, { 
@@ -1227,7 +1236,7 @@ export default function Home() {
       heightLeft -= pdfHeight;
     }
     
-    pdf.save(`${header.madrasaName || 'Question'}_Paper.pdf`);
+    pdf.save(getDownloadFileName('pdf'));
   };
 
 
@@ -1298,7 +1307,7 @@ export default function Home() {
     });
 
     const blob = await Packer.toBlob(doc);
-    saveAs(blob, `${header.madrasaName || 'Question'}_Paper.docx`);
+    saveAs(blob, getDownloadFileName('docx'));
   };
 
   const handlePrint = () => {
